@@ -11,18 +11,17 @@
 
 /* The shared memory pointer id */
 int shmid;
-int sleeper = 1;
 /* The PID of the sender */
 pid_t sendPID;
 /* The pointer to the shared memory */
 void* sharedMemPtr;
 /* The name of the output file */
 const char recvFileName[] = "recvfile";
+/* Global file point we will write to */
+FILE* fp;
 
 /* Function Prototypes */
 void init(int&, void*&);
-void retrievePID();
-void retrieveData();
 void mainLoop();
 void cleanUp(const int&, void*);
 void ctrlCSignal(int);
@@ -65,7 +64,37 @@ void init(int& shmid, void*& sharedMemPtr)
 	}
 }
 
-void retrievePID()
+void retrieveHandler(int signum)
+{
+	printf("enter data\n");
+	/* Open file for appending */
+	fp = fopen(recvFileName, "a");
+	/* Error checks */
+	if(!fp)
+	{
+		perror("fopen");
+		exit(-1);
+	}
+	/* Retrieve the message size from shared memory location */
+	int msgSize = *((int*)sharedMemPtr);
+	printf("%d\n", msgSize);
+	/* Write message to file if the size is greater than 0 */
+	if(msgSize >0)
+	{
+		if(fwrite((char*)sharedMemPtr+4, sizeof(char), msgSize, fp) < 0)
+		{
+			perror("fwrite");
+			exit(-1);
+		}
+		/* Send signal to show that data has been read */
+		kill(sendPID, SIGUSR1);
+	}
+	/* If the essage size is 0 then there is nothing to write and we are done */
+	else
+		fclose(fp);
+}
+
+void retrievePIDHandler(int signum)
 {
 	/* Retrieve sender's PID */
 	sendPID = *((int*)sharedMemPtr);
@@ -78,62 +107,16 @@ void retrievePID()
 	signal(SIGUSR1, retrieveHandler);
 }
 
-void retrieveHandler(int signum)
+void mainLoop()
 {
-	retrieveData();
-}
-
-void raiseHandler(int signum)
-{
-	printf("WAKE UP!\n");	
-	sleeper = 0;
-}
-
-void retrieveData()
-{
-	printf("enter data\n");
-	/* Open file for writing */
-	FILE* fp = fopen(recvFileName, "w");
+	/* Open up the file so that is nice and clean */
+	fp = fopen(recvFileName, "w");
 	/* Error checks */
 	if(!fp)
 	{
 		perror("fopen");
 		exit(-1);
 	}
-	do
-	{
-		/* Retrieve the message size from shared memory location */
-		int msgSize = *((int*)sharedMemPtr);
-		printf("%d\n", msgSize);
-		/* Write message to file if the size is greater than 0 */
-		if(msgSize >0)
-		{
-			if(fwrite((char*)sharedMemPtr+4, sizeof(char), msgSize, fp) < 0)
-			{
-				perror("fwrite");
-				exit(-1);
-			}
-			/* Send signal to show that data has been read */
-			kill(sendPID, SIGUSR1);
-			/* Wait for wakeup signal to keep reading from memory */
-			signal(SIGUSR1, raiseHandler);
-			/* Pause the writing */
-			while(sleeper);
-			sleeper = 1;
-			printf("continued\n");
-		}
-		else
-			fclose(fp);
-	}while(true);
-}
-
-void retrievePIDHandler(int signum)
-{
-	retrievePID();
-}
-
-void mainLoop()
-{
 	/* Place Receiver PID into shared memory location */
 	*((int*)sharedMemPtr) = getpid();
 	printf("%d\n", *((int*)sharedMemPtr));
