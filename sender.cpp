@@ -75,10 +75,8 @@ void mainLoop()
 	}
 	/* Retrieve the receiver PID from the shared memory*/
 	recvPid = *((int*)sharedMemPtr);
-	printf("%d\n", recvPid);
 	/* Write the sender PID into shared memory */
 	*((int*)sharedMemPtr) = getpid();
-	printf("%d\n",*((int*)sharedMemPtr));
 	/* Send the SIGUSR1 signal to the receiver telling
 	him to retrieve our PID */
 	kill(recvPid, SIGUSR1);
@@ -113,7 +111,9 @@ void sendHandler(int signum)
 	/* Close the file */
 	else
 	{
+		*((int*)sharedMemPtr) = 0;
+		kill(recvPid, SIGUSR1);
 		fclose(fp);
-		cleanup(shmid, sharedMemPtr);
+		cleanUp(shmid, sharedMemPtr);
 	}
 }
