@@ -10,7 +10,7 @@
 /* The size of the shared memory chunk */
 #define SHARED_MEMORY_CHUNK_SIZE 1000
 
-/* The ids for the shared memory segment and the message queue */
+/* The ids for the shared memory segment */
 int shmid, sendPID;
 
 /* The pointer to the shared memory */
@@ -21,7 +21,7 @@ const char recvFileName[] = "recvfile";
 
 
 /**
- * Sets up the shared memory segment and message queue
+ * Sets up the shared memory segment
  * @param shmid - the id of the allocated shared memory
  * @param msqid - the id of the shared memory
  * @param sharedMemPtr - the pointer to the shared memory
@@ -49,16 +49,6 @@ void init(int& shmid, void*& sharedMemPtr)
 	}
 }
 
-void retrievePID()
-{
-	/*Retrieve sender's PID*/
-	sendPID = *((int*)sharedMemPtr);
-	/*Send SIGUSR1 signal to sender*/
-	kill (sendPID, SIGUSR1);
-	/*Wait for SIGUSR1 then retreive data */
-	signal (SIGUSR1, retrieveData());
-}
-
 void retrieveData()
 {
 	/* Open file for writing */
@@ -70,7 +60,7 @@ void retrieveData()
 		exit(-1);
 	}
 	/*Begin listning for a wakeup signal*/
-	signal(SIGURS1,SIGCONT);
+	signal(SIGUSR1,SIGCONT);
 	
 	do
 	{
@@ -96,6 +86,17 @@ void retrieveData()
 		pause();
 	}while(true);
 }
+
+void retrievePID()
+{
+	/*Retrieve sender's PID*/
+	sendPID = *((int*)sharedMemPtr);
+	/*Send SIGUSR1 signal to sender*/
+	kill (sendPID, SIGUSR1);
+	/*Wait for SIGUSR1 then retreive data */
+	signal (SIGUSR1, retrieveData());
+}
+
 /**
  * The main loop
  */
@@ -142,7 +143,7 @@ int main(int argc, char** argv)
 	init(shmid, sharedMemPtr);
 	/* Go to the main loop */
 	mainLoop();
-	/* Detach from shared memory segment, and deallocate shared memory and message queue (i.e. call cleanup) */
+	/* Detach from shared memory segment, and deallocate shared memory(i.e. call cleanup) */
 	cleanUp(shmid, sharedMemPtr);
 	return 0;
 }
