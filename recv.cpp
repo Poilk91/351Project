@@ -91,7 +91,10 @@ void retrieveHandler(int signum)
 	}
 	/* If the essage size is 0 then there is nothing to write and we are done */
 	else
+	{
 		fclose(fp);
+		cleanUp(shmid, sharedMemPtr);
+	}
 }
 
 void retrievePIDHandler(int signum)
