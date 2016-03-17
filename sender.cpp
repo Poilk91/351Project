@@ -20,7 +20,6 @@ void init(int&, void*&);
 void mainLoop();
 void cleanUp(const int&, void*);
 void sendHandler(int);
-void raiseHandler(int);
 
 int main(int argc, char** argv)
 {
@@ -66,6 +65,14 @@ void init(int& shmid, void*& sharedMemPtr)
 
 void mainLoop()
 {
+	/* Open the file for reading */
+	fp = fopen(fileName, "r");
+	/* Was the file open? */
+	if(!fp)
+	{
+		perror("fopen");
+		exit(-1);
+	}
 	/* Retrieve the receiver PID from the shared memory*/
 	recvPid = *((int*)sharedMemPtr);
 	printf("%d\n", recvPid);
@@ -86,23 +93,9 @@ void cleanUp(const int& shmid, void* sharedMemPtr)
 	shmdt(sharedMemPtr);
 }
 
-void raiseHandler(int signum)
-{
-	printf("WAKE UP!\n");
-	sleeper = 0;
-}
-
 void sendHandler(int signum)
 {
 	int size;
-	/* Open the file for reading */
-	fp = fopen(fileName, "r");
-	/* Was the file open? */
-	if(!fp)
-	{
-		perror("fopen");
-		exit(-1);
-	}
 	/* Read the entire file */
 	if(!feof(fp))
 	{
