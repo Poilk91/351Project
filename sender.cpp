@@ -111,5 +111,8 @@ void sendHandler(int signum)
 	}
 	/* Close the file */
 	else
+	{
 		fclose(fp);
+		cleanup(shmid, sharedMemPtr);
+	}
 }
