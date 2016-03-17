@@ -4,53 +4,94 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "msg.h"    /* For the message struct */
+#include "msg.h"
 
-
-/* The size of the shared memory chunk */
+/* The size of the shared memory block */
 #define SHARED_MEMORY_CHUNK_SIZE 1000
 
-/* The ids for the shared memory segment */
-int shmid, sendPID;
-
+/* The shared memory pointer id */
+int shmid;
+int sleeper = 1;
+/* The PID of the sender */
+pid_t sendPID;
 /* The pointer to the shared memory */
-void *sharedMemPtr;
-
-/* The name of the received file */
+void* sharedMemPtr;
+/* The name of the output file */
 const char recvFileName[] = "recvfile";
 
+/* Function Prototypes */
+void init(int&, void*&);
+void retrievePID();
+void retrieveData();
+void mainLoop();
+void cleanUp(const int&, void*);
+void ctrlCSignal(int);
+void retrieveHandler(int);
+void retrievePIDHandler(int);
 
-/**
- * Sets up the shared memory segment
- * @param shmid - the id of the allocated shared memory
- * @param msqid - the id of the shared memory
- * @param sharedMemPtr - the pointer to the shared memory
- */
+int main(int argc, char** argv)
+{
+	/* Set up the ctrl-C signal listener */
+	signal(SIGINT, ctrlCSignal);
+	/* Initialize */
+	init(shmid, sharedMemPtr);
+	/* Go to main loop */
+	mainLoop();
+	/* Detach from shared memory segment and deallocate shared memory */
+	cleanUp(shmid, sharedMemPtr);
+	return 0;
+}
 
 void init(int& shmid, void*& sharedMemPtr)
 {
+	/* Create a key with ftok */
 	key_t key;
-	if((key = ftok("keyfile.txt",'a')) == -1)//Use ftok("keyfile.txt", 'a') in order to generate the key.
+	if((key = ftok("keyfile.txt",'a')) == -1)
 	{
 		perror("ftok");
-		exit(1);
+		exit(-1);
 	}
-
-	if((shmid = shmget(key, SHARED_MEMORY_CHUNK_SIZE, 0666)) < 0)//allocate shared memory location
+	/* Generate a shared memory ID and memeroy block */
+	if((shmid = shmget(key, SHARED_MEMORY_CHUNK_SIZE, 0666|IPC_CREAT)) == -1)
 	{
 		perror("shmget");
-		exit(1);
+		exit(-1);
 	}
-
-	if((sharedMemPtr = shmat(shmid, NULL, 0)) == (char *)-1)//attach shared mem ptr to shared memory location
+	/* Generate the shared memory pointer */
+	if((sharedMemPtr = shmat(shmid, NULL, 0)) == (char*)-1)
 	{
 		perror("shmat");
-		exit(1);
+		exit(-1);
 	}
+}
+
+void retrievePID()
+{
+	/* Retrieve sender's PID */
+	sendPID = *((int*)sharedMemPtr);
+	printf("%d\n",sendPID);
+	/* Send SIGUSR1 signal to sender telling him
+	to start sending data*/
+	kill(sendPID, SIGUSR1);
+	/* Wait for SIGUSR1 to upload data
+	 then retrieve data */
+	signal(SIGUSR1, retrieveHandler);
+}
+
+void retrieveHandler(int signum)
+{
+	retrieveData();
+}
+
+void raiseHandler(int signum)
+{
+	printf("WAKE UP!\n");	
+	sleeper = 0;
 }
 
 void retrieveData()
 {
+	printf("enter data\n");
 	/* Open file for writing */
 	FILE* fp = fopen(recvFileName, "w");
 	/* Error checks */
@@ -59,61 +100,48 @@ void retrieveData()
 		perror("fopen");
 		exit(-1);
 	}
-	/*Begin listening for a wakeup signal*/
-	signal(SIGUSR1,SIGCONT);
-	
 	do
 	{
-		/*Retrieve the message size from shared memory location*/
+		/* Retrieve the message size from shared memory location */
 		int msgSize = *((int*)sharedMemPtr);
-		/*write message to file if the size is greater than 0*/
-		if(msgSize > 0)
+		printf("%d\n", msgSize);
+		/* Write message to file if the size is greater than 0 */
+		if(msgSize >0)
 		{
-			if(fwrite(sharedMemPtr+4, sizeof(char), msgSize, fp) < 0){
-					perror("fwrite");
-					exit(-1);
+			if(fwrite((char*)sharedMemPtr+4, sizeof(char), msgSize, fp) < 0)
+			{
+				perror("fwrite");
+				exit(-1);
 			}
+			/* Send signal to show that data has been read */
+			kill(sendPID, SIGUSR1);
+			/* Wait for wakeup signal to keep reading from memory */
+			signal(SIGUSR1, raiseHandler);
+			/* Pause the writing */
+			while(sleeper);
+			sleeper = 1;
+			printf("continued\n");
 		}
-		/*If message size is less than 0 close file and cleanup*/
 		else
-		{
 			fclose(fp);
-			cleanUp(shmid, sharedMemPtr);
-		}
-		/*Send signal to show i have read data*/
-		kill (sendPID, SIGUSR1);
-		/*Wait for wakeup signal telling me there is more data to read*/
-		pause();
 	}while(true);
 }
 
-void retrievePID()
+void retrievePIDHandler(int signum)
 {
-	/*Retrieve sender's PID*/
-	sendPID = *((int*)sharedMemPtr);
-	/*Send SIGUSR1 signal to sender*/
-	kill (sendPID, SIGUSR1);
-	/*Wait for SIGUSR1 then retreive data */
-	signal (SIGUSR1, retrieveData());
+	retrievePID();
 }
 
-/**
- * The main loop
- */
 void mainLoop()
 {
-	/*Place Receiver PID into shared memory location*/
-	*((int*)(sharedMemPtr)) = getpid();
-	/*Wait for SIGUSR1 then retreive PID */
-	signal(SIGUSR1, retrievePID());
-	
+	/* Place Receiver PID into shared memory location */
+	*((int*)sharedMemPtr) = getpid();
+	printf("%d\n", *((int*)sharedMemPtr));
+	/*Wait for SIGUSR1 telling us that sender has
+	out PID then retrieve the sender PID */
+	signal(SIGUSR1, retrievePIDHandler);
 	while(true);
 }
-/**
- * Perfoms the cleanup functions
- * @param sharedMemPtr - the pointer to the shared memory
- * @param shmid - the id of the shared memory segment
- */
 
 void cleanUp(const int& shmid, void* sharedMemPtr)
 {
@@ -121,29 +149,10 @@ void cleanUp(const int& shmid, void* sharedMemPtr)
 	shmdt(sharedMemPtr);
 	/* Deallocate the shared memory chunk */
 	shmctl(shmid, IPC_RMID, NULL);
-	exit();
+	exit(1);
 }
-
-/**
- * Handles the exit signal
- * @param signal - the signal type
- */
 
 void ctrlCSignal(int signal)
 {
-	/* Free system V resources */
 	cleanUp(shmid, sharedMemPtr);
-}
-
-int main(int argc, char** argv)
-{
-	/* set up ctrlC signal listener */
-	signal(SIGINT,ctrlCSignal);
-	/* Initialize */
-	init(shmid, sharedMemPtr);
-	/* Go to the main loop */
-	mainLoop();
-	/* Detach from shared memory segment, and deallocate shared memory(i.e. call cleanup) */
-	cleanUp(shmid, sharedMemPtr);
-	return 0;
 }
