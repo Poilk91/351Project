@@ -13,12 +13,12 @@ int shmid; /* The shared memory ID */
 pid_t recvPid; /* The receiver process ID */
 void* sharedMemPtr; /* The pointer to the shared memory */
 const char* fileName;
+FILE* fp;
 int sleeper = 1;
 
 void init(int&, void*&);
-void retrievePID(int&);
+void mainLoop();
 void cleanUp(const int&, void*);
-void send();
 void sendHandler(int);
 void raiseHandler(int);
 
@@ -35,7 +35,7 @@ int main(int argc, char** argv)
 	init(shmid, sharedMemPtr);
 	/* Retrieve the reciever's PID and wait for SIGUSR1 */
 	/* Also begins sending the data into shared memory */
-	retrievePID(recvPid);
+	mainLoop();
 	/* Cleanup */
 	cleanUp (shmid, sharedMemPtr);
 	return 0;
@@ -64,7 +64,7 @@ void init(int& shmid, void*& sharedMemPtr)
 	}
 }
 
-void retrievePID(int& recvPid)
+void mainLoop()
 {
 	/* Retrieve the receiver PID from the shared memory*/
 	recvPid = *((int*)sharedMemPtr);
@@ -86,11 +86,17 @@ void cleanUp(const int& shmid, void* sharedMemPtr)
 	shmdt(sharedMemPtr);
 }
 
-/* The main send function */
-void send()
-{	int size;
+void raiseHandler(int signum)
+{
+	printf("WAKE UP!\n");
+	sleeper = 0;
+}
+
+void sendHandler(int signum)
+{
+	int size;
 	/* Open the file for reading */
-	FILE *fp = fopen(fileName, "r");
+	fp = fopen(fileName, "r");
 	/* Was the file open? */
 	if(!fp)
 	{
@@ -98,7 +104,7 @@ void send()
 		exit(-1);
 	}
 	/* Read the entire file */
-	while(!feof(fp))
+	if(!feof(fp))
 	{
 		if((size = fread((char*)sharedMemPtr+4, sizeof(char), SHARED_MEMORY_CHUNK_SIZE-4, fp)) < 0)
 		{
@@ -109,25 +115,8 @@ void send()
 		*((int*)sharedMemPtr) = size;
 		/* Let the receiver know that it can start reading */
 		kill(recvPid, SIGUSR1);
-		/* Wait for SIGUSR1 from receiver to continue
-		   writing into shared memory */
-		signal(SIGUSR1, raiseHandler);
-		/* Pause the reading */
-		while(sleeper);
-		sleeper = 1;
-		printf("continued\n");
 	}
 	/* Close the file */
-	fclose(fp);
-}
-
-void raiseHandler(int signum)
-{
-	printf("WAKE UP!\n");
-	sleeper = 0;
-}
-
-void sendHandler(int signum)
-{
-	send();
+	else
+		fclose(fp);
 }
