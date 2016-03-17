@@ -59,7 +59,7 @@ void retrieveData()
 		perror("fopen");
 		exit(-1);
 	}
-	/*Begin listning for a wakeup signal*/
+	/*Begin listening for a wakeup signal*/
 	signal(SIGUSR1,SIGCONT);
 	
 	do
@@ -78,7 +78,7 @@ void retrieveData()
 		else
 		{
 			fclose(fp);
-			cleanUp();
+			cleanUp(shmid, sharedMemPtr);
 		}
 		/*Send signal to show i have read data*/
 		kill (sendPID, SIGUSR1);
