@@ -67,14 +67,14 @@ void init(int& shmid, void*& sharedMemPtr)
 void retrieveHandler(int signum)
 {
 	printf("enter data\n");
-	/* Open file for appending */
-	fp = fopen(recvFileName, "a");
-	/* Error checks */
+	/* Open file for appending, but shouldn't be required because fp is global*/
+	/* fp = fopen(recvFileName, "a");
 	if(!fp)
+	//error check
 	{
 		perror("fopen");
 		exit(-1);
-	}
+	} */
 	/* Retrieve the message size from shared memory location */
 	int msgSize = *((int*)sharedMemPtr);
 	printf("%d\n", msgSize);
