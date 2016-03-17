@@ -7,16 +7,20 @@
 #include "msg.h" /* FOr the message struct */
 
 /* The size of the memory chunk */
-#define SHARED_MEMORY_CHUNK_SIZE 1000;
+#define SHARED_MEMORY_CHUNK_SIZE 1000
 
 int shmid; /* The shared memory ID */
 pid_t recvPid; /* The receiver process ID */
 void* sharedMemPtr; /* The pointer to the shared memory */
+const char* fileName;
+int sleeper = 1;
 
 void init(int&, void*&);
-void retrievePID(int&, const char*);
+void retrievePID(int&);
 void cleanUp(const int&, void*);
-void send(const char*);
+void send();
+void sendHandler(int);
+void raiseHandler(int);
 
 int main(int argc, char** argv)
 {
@@ -26,12 +30,12 @@ int main(int argc, char** argv)
 		fprintf(stderr, "USAGE: %s <FILE NAME>\n", argv[0]);
 		exit(-1);
 	}
+	fileName = argv[1];
 	/* Connect to shared memory send process ID */
 	init(shmid, sharedMemPtr);
 	/* Retrieve the reciever's PID and wait for SIGUSR1 */
-	retrievePID(recvPid, argv[1]);
-	/* Send the file */
-	send(argv[1]);
+	/* Also begins sending the data into shared memory */
+	retrievePID(recvPid);
 	/* Cleanup */
 	cleanUp (shmid, sharedMemPtr);
 	return 0;
@@ -47,30 +51,33 @@ void init(int& shmid, void*& sharedMemPtr)
 		exit(-1);
 	}
 	/* Allocate a shared memory chunk */
-	if((shmid = shmget(key, SHARED_MEMORY_CHUNK_SIZE, 0666)) < 0)
+	if((shmid = shmget(key, SHARED_MEMORY_CHUNK_SIZE, 0666|IPC_CREAT)) == -1)
 	{
 		perror("shmget");
 		exit(-1);
 	}
 	/* Retrieve shared memory pointer and attach to shared memory */
-	if((sharedMemPtr = shmat(shmid, NULL, 0) == (char*)-1)
+	if((sharedMemPtr = shmat(shmid, NULL, 0)) == (char*)-1)
 	{
 		perror("shmat");
 		exit(-1);
 	}
 }
 
-void retrievePID(int& recvPid, const char* fileName)
+void retrievePID(int& recvPid)
 {
 	/* Retrieve the receiver PID from the shared memory*/
 	recvPid = *((int*)sharedMemPtr);
+	printf("%d\n", recvPid);
 	/* Write the sender PID into shared memory */
 	*((int*)sharedMemPtr) = getpid();
-	/* Send the SIGUSR1 signal to the receiver */
+	printf("%d\n",*((int*)sharedMemPtr));
+	/* Send the SIGUSR1 signal to the receiver telling
+	him to retrieve our PID */
 	kill(recvPid, SIGUSR1);
-	/* Wait for SIGUSR1 to begin reading the file */
-	signal(SIGUSR1,send(fileName));
-	while(TRUE){};
+	/* Wait for SIGUSR1 to tell us to begin reading the file */
+	signal(SIGUSR1,sendHandler);
+	while(true);
 }
 
 void cleanUp(const int& shmid, void* sharedMemPtr)
@@ -80,7 +87,7 @@ void cleanUp(const int& shmid, void* sharedMemPtr)
 }
 
 /* The main send function */
-void send(const char* fileName)
+void send()
 {	int size;
 	/* Open the file for reading */
 	FILE *fp = fopen(fileName, "r");
@@ -93,7 +100,7 @@ void send(const char* fileName)
 	/* Read the entire file */
 	while(!feof(fp))
 	{
-		if(size = fread(sharedMemPtr+4, sizeof(char), SHARED_MEMORY_CHUNK_SIZE-4, fp)) < 0)
+		if((size = fread((char*)sharedMemPtr+4, sizeof(char), SHARED_MEMORY_CHUNK_SIZE-4, fp)) < 0)
 		{
 			perror("fread");
 			exit(-1);
@@ -104,10 +111,23 @@ void send(const char* fileName)
 		kill(recvPid, SIGUSR1);
 		/* Wait for SIGUSR1 from receiver to continue
 		   writing into shared memory */
-		signal(SIGUSR1,SIGCONT);
+		signal(SIGUSR1, raiseHandler);
 		/* Pause the reading */
-		pause();
+		while(sleeper);
+		sleeper = 1;
+		printf("continued\n");
 	}
 	/* Close the file */
 	fclose(fp);
+}
+
+void raiseHandler(int signum)
+{
+	printf("WAKE UP!\n");
+	sleeper = 0;
+}
+
+void sendHandler(int signum)
+{
+	send();
 }
