@@ -66,18 +66,10 @@ void init(int& shmid, void*& sharedMemPtr)
 
 void retrieveHandler(int signum)
 {
-	printf("enter data\n");
 	/* Open file for appending, but shouldn't be required because fp is global*/
-	/* fp = fopen(recvFileName, "a");
-	if(!fp)
-	//error check
-	{
-		perror("fopen");
-		exit(-1);
-	} */
 	/* Retrieve the message size from shared memory location */
 	int msgSize = *((int*)sharedMemPtr);
-	printf("%d\n", msgSize);
+
 	/* Write message to file if the size is greater than 0 */
 	if(msgSize >0)
 	{
@@ -101,7 +93,6 @@ void retrievePIDHandler(int signum)
 {
 	/* Retrieve sender's PID */
 	sendPID = *((int*)sharedMemPtr);
-	printf("%d\n",sendPID);
 	/* Send SIGUSR1 signal to sender telling him
 	to start sending data*/
 	kill(sendPID, SIGUSR1);
@@ -122,7 +113,6 @@ void mainLoop()
 	}
 	/* Place Receiver PID into shared memory location */
 	*((int*)sharedMemPtr) = getpid();
-	printf("%d\n", *((int*)sharedMemPtr));
 	/*Wait for SIGUSR1 telling us that sender has
 	out PID then retrieve the sender PID */
 	signal(SIGUSR1, retrievePIDHandler);
