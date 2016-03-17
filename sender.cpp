@@ -91,6 +91,7 @@ void cleanUp(const int& shmid, void* sharedMemPtr)
 {
 	/* Detach from shared memory */
 	shmdt(sharedMemPtr);
+	exit(1);
 }
 
 void sendHandler(int signum)
