@@ -3,7 +3,7 @@ Shared Memory Sending and Recieving
   Section: CPSC 351-02
   Names: Kevin Ochoa, Adam Beck, Alexander Chiu, Michael Poole
   Email Address: PooleApply@gmail.com , adamjbeck@csu.fullerton.edu, kevinofree@yahoo.com, achiu3@csu.fullerton.edu
-  How to execute signal version: Execute command 'make -f makeFile -j 2'
+  How to execute signal version: Execute command 'make -f makeFile -j 2' then run recv.cpp followed by sender.cpp
   How to execute queue version: Execute command 'make -f makeFile2 -j 2'
   Whether you implemented the extra credit: YES
   Anything special about your submission that we should take note of: recv.cpp is run before sender.cpp in signal version
